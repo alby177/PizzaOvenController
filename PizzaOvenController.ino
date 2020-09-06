@@ -1,5 +1,6 @@
 #include <LiquidCrystal.h>
 #include "max6675.h"
+#include "EEPROM.h"
 
 // LCD constant variables
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
@@ -16,6 +17,19 @@ const int csPin = 11;
 const int soPin = 12;
 MAX6675 ktc(sckPin, csPin, soPin);
 
+// Relè variables
+const int relePin = 3;
+
+// EEPROM Variables
+const int minTempHigh = 0;
+const int minTempLow = 1;
+const int maxTempHigh = 2;
+const int maxTempLow = 3;
+
+// Buzzer variables
+const int buzzerPin = 2;
+bool tempReached;
+
 enum AvailableStates {
   ReadTemp = 0,
   SetMinTemp,
@@ -23,9 +37,9 @@ enum AvailableStates {
 };
 
 AvailableStates currentState = AvailableStates::ReadTemp;
-float minTemp = 0;
-float maxTemp = 1024;
-float currentTemp = 0;
+uint16_t minTemp = 0;
+uint16_t maxTemp = 1024;
+uint16_t currentTemp = 0;
 
 int readLcdButtons()
 {
@@ -81,7 +95,8 @@ void runStateMachine()
       switch (buttonPressed)
       {
         case btnSelect:
-            // Salvare valore temperatura minima in memoria
+          EEPROM.update(minTempHigh, static_cast<byte>(minTemp >> 8));
+          EEPROM.update(minTempLow, static_cast<byte>(minTemp));
           currentState = AvailableStates::SetMaxTemp;
         break;
 
@@ -105,7 +120,10 @@ void runStateMachine()
       switch (buttonPressed)
       {
         case btnSelect:
-            // Salvare valore temperatura massima in memoria
+          if(maxTemp < minTemp)
+            maxTemp = minTemp + 1;
+          EEPROM.update(maxTempHigh, static_cast<byte>(maxTemp >> 8));
+          EEPROM.update(maxTempLow, static_cast<byte>(maxTemp));
           currentState = AvailableStates::ReadTemp;
         break;
 
@@ -121,10 +139,15 @@ void runStateMachine()
 }
 
 void setup() {
-  // Caricare valori minimi e massimi temperatura
-  digitalWrite(SS, HIGH);
+  minTemp = EEPROM.read(minTempHigh) << 8;
+  minTemp += EEPROM.read(minTempLow);
+  maxTemp = EEPROM.read(maxTempHigh) << 8;
+  maxTemp += EEPROM.read(maxTempLow);
+  pinMode(relePin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
 
-  Serial.begin(9600); // DEBUG
+  digitalWrite(buzzerPin, LOW);
+  tempReached = false;
   
   lcd.begin(16, 2);
   lcd.setCursor(0, 0);
@@ -132,7 +155,6 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("PIZZA PAPA'");
   delay(2000);
-  lcd.clear();
 }
 
 void loop() {
@@ -140,11 +162,11 @@ void loop() {
 
   if(currentTemp < minTemp || currentTemp > maxTemp)
   {
-    // Aprire relè
+    digitalWrite(relePin, HIGH);
   }
   else
   {
-    // Chiudere Relè
+    digitalWrite(relePin, LOW);
   }
   
   runStateMachine();
