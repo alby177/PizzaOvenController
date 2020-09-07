@@ -168,6 +168,7 @@ void loop() {
     digitalWrite(relePin, LOW);
     if(tempReached == false)
     {
+      tempReached = true;
       emitSound();
     }
   }
