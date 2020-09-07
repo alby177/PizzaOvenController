@@ -28,7 +28,7 @@ const int maxTempLow = 3;
 
 // Buzzer variables
 const int buzzerPin = 2;
-bool tempReached;
+bool tempReached = false;
 
 enum AvailableStates {
   ReadTemp = 0,
@@ -95,8 +95,8 @@ void runStateMachine()
       switch (buttonPressed)
       {
         case btnSelect:
-          EEPROM.update(minTempHigh, static_cast<byte>(minTemp >> 8));
-          EEPROM.update(minTempLow, static_cast<byte>(minTemp));
+          EEPROM.update(minTempHigh, static_cast<byte>((minTemp & 0xFF00) >> 8));
+          EEPROM.update(minTempLow, static_cast<byte>(minTemp & 0x00FF));
           currentState = AvailableStates::SetMaxTemp;
         break;
 
@@ -122,8 +122,8 @@ void runStateMachine()
         case btnSelect:
           if(maxTemp < minTemp)
             maxTemp = minTemp + 1;
-          EEPROM.update(maxTempHigh, static_cast<byte>(maxTemp >> 8));
-          EEPROM.update(maxTempLow, static_cast<byte>(maxTemp));
+          EEPROM.update(maxTempHigh, static_cast<byte>((maxTemp & 0xFF00) >> 8));
+          EEPROM.update(maxTempLow, static_cast<byte>(maxTemp & 0x00FF));
           currentState = AvailableStates::ReadTemp;
         break;
 
@@ -138,11 +138,14 @@ void runStateMachine()
   }
 }
 
+void emitSound()
+{
+  // TO DO: Manage sound to emit when temperature is reached  
+}
+
 void setup() {
-  minTemp = EEPROM.read(minTempHigh) << 8;
-  minTemp += EEPROM.read(minTempLow);
-  maxTemp = EEPROM.read(maxTempHigh) << 8;
-  maxTemp += EEPROM.read(maxTempLow);
+  minTemp = (static_cast<uint16_t>(EEPROM.read(minTempHigh)) << 8) + static_cast<uint16_t>(EEPROM.read(minTempLow));
+  maxTemp = (static_cast<uint16_t>(EEPROM.read(maxTempHigh)) << 8) + static_cast<uint16_t>(EEPROM.read(maxTempLow));
   pinMode(relePin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
 
@@ -160,13 +163,18 @@ void setup() {
 void loop() {
   currentTemp = ktc.readCelsius();
 
-  if(currentTemp < minTemp || currentTemp > maxTemp)
+  if(currentTemp <= maxTemp && currentTemp >= minTemp)
   {
-    digitalWrite(relePin, HIGH);
+    digitalWrite(relePin, LOW);
+    if(tempReached == false)
+    {
+      emitSound();
+    }
   }
   else
   {
-    digitalWrite(relePin, LOW);
+    digitalWrite(relePin, HIGH);
+    tempReached = false;
   }
   
   runStateMachine();
